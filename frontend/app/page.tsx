@@ -1527,17 +1527,29 @@ function CasesPage({ allCases, clients, onSelect, onRefresh, toast }: {
   onRefresh: () => void; toast: (m: string, t?: "success" | "error") => void;
 }) {
   const [query, setQuery] = useState("");
+  const [selectedCourtId, setSelectedCourtId] = useState("delhi_hc");
   const [results, setResults] = useState<CaseRow[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [tab, setTab] = useState<"all" | "upcoming" | "no-client">("all");
 
-  const search = useCallback(async (q: string) => {
+  const search = useCallback(async (q: string, courtId?: string) => {
     if (!q.trim()) { setResults(null); return; }
     setSearching(true);
     try {
-      const r = await api(`/cases?query=${encodeURIComponent(q)}&limit=100`) as { cases: CaseRow[] };
-      setResults(r.cases);
+      // If court_id is for lookup (not simple search), use /cases/lookup endpoint
+      if (courtId && q.match(/^[\w.\-()\/]+$/)) {
+        // This looks like a case number for specific court lookup
+        const r = await api("/cases/lookup", {
+          method: "POST",
+          body: JSON.stringify({ case_no: q, court_id: courtId })
+        }) as { case: CaseRow };
+        setResults(r.case ? [r.case] : []);
+      } else {
+        // Regular search
+        const r = await api(`/cases?query=${encodeURIComponent(q)}&limit=100`) as { cases: CaseRow[] };
+        setResults(r.cases);
+      }
     } catch (e) { toast((e as Error).message, "error"); }
     finally { setSearching(false); }
   }, [toast]);
@@ -1563,33 +1575,53 @@ function CasesPage({ allCases, clients, onSelect, onRefresh, toast }: {
             <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Case Number</label>
             <input className="form-input" placeholder="e.g., W.P.(C)-5972/2022" value={query}
               onChange={e => setQuery(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && search(query)} />
+              onKeyDown={e => e.key === "Enter" && search(query, selectedCourtId)} />
           </div>
           <div>
             <label style={{ fontSize: 11, fontWeight: 600, color: "var(--text-secondary)", display: "block", marginBottom: 4 }}>Select Court</label>
-            <select className="form-select" onChange={e => {
-              if (e.target.value) {
-                setQuery(e.target.value);
-                setTimeout(() => search(e.target.value), 100);
-              }
-            }}>
-              <option value="">—  Choose a court  —</option>
+            <select className="form-select" value={selectedCourtId} onChange={e => setSelectedCourtId(e.target.value)}>
               <optgroup label="High Courts (21)">
-                {["Delhi High Court", "Bombay High Court", "Madras High Court", "Calcutta High Court", "Chennai High Court", "Punjab High Court", "Gujarat High Court", "Rajasthan High Court", "Kerala High Court", "Maharashtra High Court", "Allahabad High Court", "Jharkhand High Court", "Orissa High Court", "Telangana High Court", "Guwahati High Court", "Uttarakhand High Court", "Jammu & Kashmir High Court", "Himachal Pradesh High Court", "Chhattisgarh High Court", "Bihar High Court", "Madhya Pradesh High Court"].map(c => <option key={c} value={c}>{c}</option>)}
+                <option value="delhi_hc">Delhi High Court</option>
+                <option value="bombay_hc">Bombay High Court</option>
+                <option value="madras_hc">Madras High Court</option>
+                <option value="kolkata_hc">Calcutta High Court</option>
+                <option value="chennai_hc">Chennai High Court</option>
+                <option value="punjab_hc">Punjab High Court</option>
+                <option value="gujarat_hc">Gujarat High Court</option>
+                <option value="rajasthan_hc">Rajasthan High Court</option>
+                <option value="kerala_hc">Kerala High Court</option>
+                <option value="maharashtra_hc">Maharashtra High Court</option>
+                <option value="allahabad_hc">Allahabad High Court</option>
+                <option value="jharkhand_hc">Jharkhand High Court</option>
+                <option value="orissa_hc">Orissa High Court</option>
+                <option value="telangana_hc">Telangana High Court</option>
+                <option value="guwahati_hc">Guwahati High Court</option>
+                <option value="uttarakhand_hc">Uttarakhand High Court</option>
+                <option value="jk_hc">Jammu & Kashmir High Court</option>
+                <option value="himachal_hc">Himachal Pradesh High Court</option>
+                <option value="chhattisgarh_hc">Chhattisgarh High Court</option>
+                <option value="bihar_hc">Bihar High Court</option>
+                <option value="mp_hc">Madhya Pradesh High Court</option>
               </optgroup>
               <optgroup label="District Courts">
-                <option value="District Court (eCourts)">District Court (eCourts - 743+)</option>
+                <option value="district">District Court (eCourts - 743+)</option>
               </optgroup>
               <optgroup label="Tribunals (7)">
-                {["ITAT", "NCLT", "NCLAT", "NCDRC", "DRT", "CAT", "NGT"].map(c => <option key={c} value={c}>{c}</option>)}
+                <option value="itat">ITAT</option>
+                <option value="nclt">NCLT</option>
+                <option value="nclat">NCLAT</option>
+                <option value="ncdrc">NCDRC</option>
+                <option value="drt">DRT</option>
+                <option value="cat">CAT</option>
+                <option value="ngt">NGT</option>
               </optgroup>
             </select>
           </div>
-          <button className="btn btn-primary" onClick={() => search(query)} disabled={searching} style={{ whiteSpace: "nowrap" }}>
+          <button className="btn btn-primary" onClick={() => search(query, selectedCourtId)} disabled={searching} style={{ whiteSpace: "nowrap" }}>
             {I.search} {searching ? "Searching…" : "Search"}
           </button>
         </div>
-        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>✓ All 29 courts supported · Case lookup routing automatic</div>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>✓ All 29 courts supported · Court-specific lookup routing</div>
       </div>
 
       <div className="panel">
@@ -1601,9 +1633,9 @@ function CasesPage({ allCases, clients, onSelect, onRefresh, toast }: {
                 {I.search}
                 <input className="search-input" placeholder="Search case no. or party name…" value={query}
                   onChange={e => { setQuery(e.target.value); if (!e.target.value) setResults(null); }}
-                  onKeyDown={e => e.key === "Enter" && search(query)} />
+                  onKeyDown={e => e.key === "Enter" && search(query, selectedCourtId)} />
               </div>
-              <button className="btn btn-primary" onClick={() => search(query)} disabled={searching} style={{ whiteSpace: "nowrap" }}>
+              <button className="btn btn-primary" onClick={() => search(query, selectedCourtId)} disabled={searching} style={{ whiteSpace: "nowrap" }}>
                 {searching ? "…" : "Search"}
               </button>
             </div>
